@@ -1,0 +1,17 @@
+# Dependencies (re-created with npm install)
+node_modules/
+
+# Secrets — NEVER commit
+.env
+
+# Locally stored photos (development only)
+backend/uploads/
+
+# Test output and logs
+load-testing/results-*.json
+*.log
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/

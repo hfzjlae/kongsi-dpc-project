@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Photo — Kongsi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Figtree:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect x=%224%22 y=%223%22 width=%2224%22 height=%2226%22 rx=%222%22 fill=%22%23fff%22 stroke=%22%2317212b%22 stroke-width=%222%22/%3E%3Crect x=%227%22 y=%226%22 width=%2218%22 height=%2215%22 fill=%22%231f6f54%22/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar" id="topbar"></header>
+
+  <main class="page page-narrow">
+    <a class="back-link" id="backLink" href="groups.html">Back to album</a>
+    <p id="pageMessage" class="message" hidden></p>
+
+    <article class="photo-print" id="photo" hidden>
+      <img id="photoImg" alt="" />
+      <div class="photo-info">
+        <div>
+          <h1 id="photoCaption" style="font-size:1.5rem"></h1>
+          <p class="muted small" id="photoMeta"></p>
+          <ul class="tags" id="photoTags"></ul>
+        </div>
+        <button type="button" class="button button-danger button-small" id="deletePhoto" hidden>Delete photo</button>
+      </div>
+    </article>
+
+    <section class="panel">
+      <div class="feed-head">
+        <h2 id="commentHeading">Comments</h2>
+        <span class="live">Updates every 5 seconds</span>
+      </div>
+      <ul class="comments" id="comments"></ul>
+      <p id="commentMessage" class="message" hidden></p>
+      <form id="commentForm">
+        <div class="field">
+          <label for="commentBody">Add a comment</label>
+          <textarea id="commentBody" maxlength="1000" required placeholder="Say something about this photo"></textarea>
+        </div>
+        <button class="button" type="submit">Post comment</button>
+      </form>
+    </section>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/photo.js"></script>
+</body>
+</html>

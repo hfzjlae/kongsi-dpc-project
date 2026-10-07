@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Group album — Kongsi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Figtree:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect x=%224%22 y=%223%22 width=%2224%22 height=%2226%22 rx=%222%22 fill=%22%23fff%22 stroke=%22%2317212b%22 stroke-width=%222%22/%3E%3Crect x=%227%22 y=%226%22 width=%2218%22 height=%2215%22 fill=%22%231f6f54%22/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar" id="topbar"></header>
+
+  <main class="page">
+    <a class="back-link" href="groups.html">All groups</a>
+    <p id="pageMessage" class="message" hidden></p>
+
+    <div class="split">
+      <aside>
+        <section class="panel">
+          <h1 id="groupName">Loading…</h1>
+          <label>Invite code</label>
+          <div class="invite">
+            <span id="inviteCode">…</span>
+            <button type="button" class="button button-quiet button-small" id="copyCode">Copy</button>
+          </div>
+          <p class="hint">Share this code so friends can join.</p>
+          <h3 style="margin-top:1rem">Members</h3>
+          <ul class="member-list" id="members"></ul>
+        </section>
+
+        <section class="panel">
+          <h2>Add a photo</h2>
+          <p id="uploadMessage" class="message" hidden></p>
+          <form id="uploadForm">
+            <div class="field">
+              <label for="photoFile">Photo</label>
+              <input type="file" id="photoFile" accept="image/jpeg,image/png,image/webp,image/gif" required />
+              <img id="preview" class="preview" alt="" hidden />
+              <p class="hint">JPEG, PNG, WebP or GIF. Large photos are resized before upload.</p>
+            </div>
+            <div class="field">
+              <label for="caption">Caption</label>
+              <textarea id="caption" maxlength="500" placeholder="What's happening here?"></textarea>
+            </div>
+            <div class="field">
+              <label for="tags">Tags</label>
+              <input type="text" id="tags" placeholder="e.g. food, ipoh, raya" />
+              <p class="hint">Separate tags with commas.</p>
+            </div>
+            <button class="button button-block" type="submit">Upload photo</button>
+          </form>
+        </section>
+      </aside>
+
+      <section>
+        <form class="filters" id="filterForm">
+          <div class="field field-search">
+            <label for="q">Search captions, tags and comments</label>
+            <input type="search" id="q" placeholder="Search" />
+          </div>
+          <div class="field">
+            <label for="uploader">Uploaded by</label>
+            <select id="uploader"><option value="">Anyone</option></select>
+          </div>
+          <div class="field">
+            <label for="tag">Tag</label>
+            <select id="tag"><option value="">Any tag</option></select>
+          </div>
+          <div class="field">
+            <label for="from">From</label>
+            <input type="date" id="from" />
+          </div>
+          <div class="field">
+            <label for="to">To</label>
+            <input type="date" id="to" />
+          </div>
+          <div class="field">
+            <button class="button" type="submit">Apply filters</button>
+          </div>
+        </form>
+
+        <div class="feed-head">
+          <p class="muted small" id="feedStatus"></p>
+          <button type="button" class="button button-quiet button-small" id="clearFilters" hidden>Clear filters</button>
+        </div>
+
+        <div class="board" id="board"></div>
+        <div style="text-align:center">
+          <button type="button" class="button button-quiet" id="loadMore" hidden>Show more photos</button>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/group.js"></script>
+</body>
+</html>

@@ -30,13 +30,13 @@ The browser never touches the database or the photo bucket directly. Only the AP
 
 | Folder | Contents | Owner |
 |---|---|---|
-| `frontend/` | Tier 1: the four pages, `css/style.css`, `js/` | **Member A** |
-| `backend/` | Tier 2: the REST API (`src/routes/` = endpoints) | **Member B** |
-| `database/` | Tier 3: `schema.sql` (all tables and indexes) | **Member C** |
-| `deploy/` | AWS scripts and policy files | **Member C** (with B) |
-| `load-testing/` | k6 multi-user and concurrency tests | **Member C** (with A) |
-| `docs/API.md` | the frontend ↔ backend contract | **A + B** together |
-| `docs/DEPLOYMENT-AWS.md` | step-by-step AWS guide | **C** |
+| `frontend/` | Tier 1: the four pages, `css/style.css`, `js/` | **Myra** |
+| `backend/` | Tier 2: the REST API (`src/routes/` = endpoints) | **Najla** |
+| `database/` | Tier 3: `schema.sql` (all tables and indexes) | **Aniesha** |
+| `deploy/` | AWS scripts and policy files | **Aniesha** (with Najla) |
+| `load-testing/` | k6 multi-user and concurrency tests | **Aniesha** (with Myra) |
+| `docs/API.md` | the frontend ↔ backend contract | **Myra + Najla** together |
+| `docs/DEPLOYMENT-AWS.md` | step-by-step AWS guide | **Aniesha** |
 
 ```
 kongsi/

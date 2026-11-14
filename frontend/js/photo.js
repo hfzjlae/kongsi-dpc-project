@@ -1,9 +1,14 @@
 /* ============================================================
-   photo.js — one photo with its live comment thread.
+   photo.js — one photo with its live comment thread. Matches backend:
+     GET /photos/:id            -> { photo:{ url, caption, tags[], group_id,
+                                     uploader (username), uploader_id } }
+     GET /photos/:id/comments   -> { comments:[ { id, body, version,
+                                     created_at, updated_at, user_id, username } ] }
+     POST /photos/:id/comments  -> { comment }          body: { body }
+     PUT /comments/:id          -> { comment } or 409    body: { body, version }
    - comments poll every COMMENT_POLL_MS (5s), new ones fade in
-   - post optimistically (show faded, confirm on reply)
-   - edit / delete only your own comments
-   - 409 version conflict -> show the "changed elsewhere" bar
+   - post optimistically; edit/delete only your own
+   - 409 version conflict -> "changed elsewhere" bar
    ============================================================ */
 
 (function () {
@@ -13,9 +18,10 @@
   if (!photoId) { location.replace("groups.html"); return; }
 
   const me = Auth.user || {};
+  const myId = Number(me.id);
   const meAvatar = document.getElementById("meAvatar");
-  meAvatar.textContent = initials(me.name);
-  meAvatar.style.background = colourFor(me.name);
+  meAvatar.textContent = initials(me.username);
+  meAvatar.style.background = colourFor(me.username);
 
   const el = {
     hero: document.getElementById("hero"),
@@ -31,31 +37,32 @@
 
   let groupId = null;
   let pollTimer = null;
-  let editingId = null;                 // comment currently being edited
-  const seenIds = new Set();            // for fade-in of new comments
-  const pendingComments = [];           // optimistic, not yet confirmed
+  let editingId = null;
+  const seenIds = new Set();
+  const pendingComments = [];
 
   /* ---------- load the photo ---------- */
   async function loadPhoto() {
     try {
-      const p = await api.get(`/photos/${encodeURIComponent(photoId)}`);
-      groupId = p.groupId;
-      el.backToGroup.href = `group.html?id=${encodeURIComponent(p.groupId)}`;
+      const data = await api.get(`/photos/${encodeURIComponent(photoId)}`);
+      const p = data.photo;
+      groupId = p.group_id;
+      el.backToGroup.href = `group.html?id=${encodeURIComponent(p.group_id)}`;
       el.hero.src = p.url;
       el.hero.alt = p.caption || "photo";
       const tags = (p.tags || []).map((t) => `<span class="ptag">#${esc(t)}</span>`).join(" ");
-      const up = p.uploader || {};
+      const uploader = p.uploader || "";
       el.caption.innerHTML = `
         <div class="who">
-          <span class="avatar" style="width:30px;height:30px;font-size:12px;background:${colourFor(up.name)}">${esc(initials(up.name))}</span>
-          <div><b>${esc(up.name || "")}</b><small>${esc(timeAgo(p.createdAt))}</small></div>
+          <span class="avatar" style="width:30px;height:30px;font-size:12px;background:${colourFor(uploader)}">${esc(initials(uploader))}</span>
+          <div><b>${esc(uploader)}</b><small>${esc(timeAgo(p.created_at))}</small></div>
         </div>
         ${p.caption ? `<p>${esc(p.caption)}</p>` : ""}
         ${tags ? `<div class="ptags" style="margin-top:9px">${tags}</div>` : ""}`;
-      // only the owner can delete
-      if (p.canDelete) {
+      // only the uploader can delete
+      if (Number(p.uploader_id) === myId) {
         el.deletePhoto.hidden = false;
-        el.deletePhoto.onclick = () => deletePhoto(p.groupId);
+        el.deletePhoto.onclick = () => deletePhoto(p.group_id);
       }
     } catch (err) {
       if (err.status === 403 || err.status === 404) {
@@ -66,7 +73,7 @@
   }
 
   async function deletePhoto(gid) {
-    // in-page confirm (no browser confirm(), which is blocked in some embeds)
+    // in-page confirm (browser confirm() is blocked in some embeds)
     if (el.deletePhoto.dataset.armed !== "1") {
       el.deletePhoto.dataset.armed = "1";
       el.deletePhoto.textContent = "Click again to confirm";
@@ -86,13 +93,14 @@
     wrap.className = "cmt" + (pending ? " pending" : "");
     if (!pending && !seenIds.has(c.id)) { wrap.classList.add("fade-in"); seenIds.add(c.id); }
     wrap.dataset.id = c.id || "";
-    const author = c.author || { name: c.authorName };
-    const mine = c.mine || (author.id && author.id === me.id);
+    const name = c.username || "";
+    const mine = Number(c.user_id) === myId;
+    const edited = c.version > 1 || (c.updated_at && c.updated_at !== c.created_at);
 
     wrap.innerHTML = `
-      <span class="av" style="background:${colourFor(author.name)}">${esc(initials(author.name))}</span>
+      <span class="av" style="background:${colourFor(name)}">${esc(initials(name))}</span>
       <div class="bub">
-        <div class="top"><b>${mine ? "You" : esc(author.name || "")}</b><time>${pending ? "sending…" : esc(timeAgo(c.createdAt))}${c.edited ? " · edited" : ""}</time></div>
+        <div class="top"><b>${mine ? "You" : esc(name)}</b><time>${pending ? "sending…" : esc(timeAgo(c.created_at))}${edited && !pending ? " · edited" : ""}</time></div>
         <p>${esc(c.body)}</p>
         ${mine && !pending ? `<div class="own-actions"><button data-act="edit">Edit</button><button data-act="del">Delete</button></div>` : ""}
       </div>`;
@@ -107,7 +115,8 @@
   /* ---------- load + merge comments ---------- */
   async function loadComments() {
     try {
-      const comments = await api.get(`/photos/${encodeURIComponent(photoId)}/comments`);
+      const data = await api.get(`/photos/${encodeURIComponent(photoId)}/comments`);
+      const comments = data.comments || [];
       render(comments);
       el.cmtStatus.textContent = `${comments.length} comment${comments.length === 1 ? "" : "s"} · refreshes every ${CFG.COMMENT_POLL_MS / 1000}s`;
     } catch (err) {
@@ -116,11 +125,9 @@
   }
 
   function render(comments) {
-    // don't stomp an in-progress edit
-    if (editingId) return;
+    if (editingId) return; // don't stomp an in-progress edit
     el.cmtList.innerHTML = "";
     comments.forEach((c) => el.cmtList.appendChild(commentNode(c)));
-    // re-append any optimistic comments still awaiting confirmation
     pendingComments.forEach((c) => el.cmtList.appendChild(commentNode(c, true)));
     el.cmtList.scrollTop = el.cmtList.scrollHeight;
   }
@@ -132,14 +139,13 @@
     if (!body) return;
     el.cmtInput.value = "";
 
-    const temp = { body, author: { id: me.id, name: me.name }, createdAt: new Date().toISOString(), _temp: Math.random() };
+    const temp = { body, user_id: myId, username: me.username, created_at: new Date().toISOString() };
     pendingComments.push(temp);
     el.cmtList.appendChild(commentNode(temp, true));
     el.cmtList.scrollTop = el.cmtList.scrollHeight;
 
     try {
       await api.post(`/photos/${encodeURIComponent(photoId)}/comments`, { body });
-      // drop the optimistic copy; the poll (or this reload) shows the real one
       pendingComments.splice(pendingComments.indexOf(temp), 1);
       await loadComments();
     } catch (err) {
@@ -160,7 +166,7 @@
 
     const row = document.createElement("div");
     row.className = "edit-row";
-    row.innerHTML = `<input value="${esc(c.body)}" maxlength="500"><button class="btn" style="padding:6px 12px">Save</button><button class="btn ghost" style="padding:6px 10px">Cancel</button>`;
+    row.innerHTML = `<input value="${esc(c.body)}" maxlength="1000"><button class="btn" style="padding:6px 12px">Save</button><button class="btn ghost" style="padding:6px 10px">Cancel</button>`;
     bub.appendChild(row);
     const input = row.querySelector("input");
     input.focus();
@@ -172,7 +178,7 @@
       if (!body) return;
       try {
         // send the version we last saw; backend returns 409 if it changed
-        await api.patch(`/comments/${encodeURIComponent(c.id)}`, { body, version: c.version });
+        await api.put(`/comments/${encodeURIComponent(c.id)}`, { body, version: c.version });
         editingId = null;
         clearConflict();
         await loadComments();

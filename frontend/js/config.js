@@ -4,13 +4,11 @@
    ============================================================ */
 
 window.KONGSI_CONFIG = {
-  // Local development (API running on your laptop):
-  API_URL: "http://localhost:3000/api",
+  // Live API (EC2, Sydney ap-southeast-2):
+  API_URL: "http://13.54.98.67/api",
 
-  // When you deploy, comment the line above and use your EC2 address, e.g.:
-  // API_URL: "http://13.250.xx.xx/api",
-  // or, behind a domain / HTTPS:
-  // API_URL: "https://api.kongsi.example.com/api",
+  // For local development, comment the line above and use this instead:
+  // API_URL: "http://localhost:3000/api",
 
   // How often the feed and comments re-poll, in milliseconds.
   FEED_POLL_MS: 20000,     // album feed  -> every 20s  (per spec)

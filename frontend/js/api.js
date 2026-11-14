@@ -96,7 +96,7 @@ async function apiFetch(path, { method = "GET", body, isForm = false, auth = tru
 const api = {
   get: (p) => apiFetch(p),
   post: (p, body) => apiFetch(p, { method: "POST", body }),
-  patch: (p, body) => apiFetch(p, { method: "PATCH", body }),
+  put: (p, body) => apiFetch(p, { method: "PUT", body }),
   del: (p) => apiFetch(p, { method: "DELETE" }),
   upload: (p, form) => apiFetch(p, { method: "POST", body: form, isForm: true }),
   // no-auth call used by the login/register page

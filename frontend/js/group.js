@@ -1,9 +1,12 @@
 /* ============================================================
-   group.js — album feed for one group.
-   - search & filter (keyword, uploader, tag, date range)
-   - polls the feed every FEED_POLL_MS (20s)
-   - shows which API server answered (X-Served-By)
-   - upload modal that resizes the photo in the browser first
+   group.js — album feed for one group. Matches the backend:
+     GET /groups/:id          -> { group:{name,invite_code}, members:[{id,username}], tags:[] }
+     GET /groups/:id/photos   -> { photos:[ { id, url, caption, tags[],
+                                   uploader (username string), comment_count } ] }
+     POST /groups/:id/photos  -> multipart field "photo", caption, tags
+   - search & filter (keyword, uploader=username, tag, date range)
+   - polls every FEED_POLL_MS (20s); shows X-Served-By
+   - upload modal resizes the photo in the browser first
    ============================================================ */
 
 (function () {
@@ -14,8 +17,8 @@
 
   const me = Auth.user || {};
   const meAvatar = document.getElementById("meAvatar");
-  meAvatar.textContent = initials(me.name);
-  meAvatar.style.background = colourFor(me.name);
+  meAvatar.textContent = initials(me.username);
+  meAvatar.style.background = colourFor(me.username);
 
   const el = {
     groupName: document.getElementById("groupName"),
@@ -33,24 +36,27 @@
 
   let pollTimer = null;
   let inviteCode = "";
+  let groupTags = [];
 
   /* ---------- load group header + filter options ---------- */
   async function loadGroup() {
     try {
-      const g = await api.get(`/groups/${encodeURIComponent(groupId)}`);
+      const data = await api.get(`/groups/${encodeURIComponent(groupId)}`);
+      const g = data.group;
       el.groupName.textContent = g.name;
       document.title = `Kongsi — ${g.name}`;
-      inviteCode = g.inviteCode || "";
+      inviteCode = g.invite_code || "";
       if (inviteCode) {
         el.invitePill.hidden = false;
         el.invitePill.textContent = "⧉ Invite " + inviteCode;
       }
-      // populate uploader filter from members
-      (g.members || []).forEach((m) => {
+      // uploader filter: value is the USERNAME (backend matches on username)
+      (data.members || []).forEach((m) => {
         const opt = document.createElement("option");
-        opt.value = m.id; opt.textContent = m.name;
+        opt.value = m.username; opt.textContent = m.username;
         el.uploader.appendChild(opt);
       });
+      groupTags = data.tags || [];
     } catch (err) {
       if (err.status === 403 || err.status === 404) {
         toast("You are not a member of this group.", true);
@@ -89,22 +95,20 @@
           ${p.caption ? `<p class="pcap">${esc(p.caption)}</p>` : ""}
           ${tags ? `<div class="ptags">${tags}</div>` : ""}
           <div class="pmeta" style="margin-top:7px">
-            <span>${esc(p.uploader ? p.uploader.name : "")}</span>
-            <span>💬 ${p.commentCount || 0}</span>
+            <span>${esc(p.uploader || "")}</span>
+            <span>💬 ${p.comment_count || 0}</span>
           </div>
         </div>
       </a>`;
   }
 
-  function knownTags(photos) {
-    const set = new Set();
-    photos.forEach((p) => (p.tags || []).forEach((t) => set.add(t)));
-    return [...set].sort();
-  }
+  /* keep the tag dropdown stable: full group tag list unioned with any
+     tags visible in the current feed (so freshly uploaded tags appear) */
   function syncTagOptions(photos) {
+    const set = new Set(groupTags);
+    photos.forEach((p) => (p.tags || []).forEach((t) => set.add(t)));
+    const tags = [...set].sort();
     const current = el.tag.value;
-    const tags = knownTags(photos);
-    // only rebuild if the set changed, so the dropdown doesn't flicker while open
     const existing = [...el.tag.options].slice(1).map((o) => o.value);
     if (existing.join("|") === tags.join("|")) return;
     el.tag.innerHTML = `<option value="">Tag: All</option>` +
@@ -115,7 +119,7 @@
   async function loadFeed() {
     try {
       const data = await api.get(`/groups/${encodeURIComponent(groupId)}/photos${buildQuery()}`);
-      const photos = data.photos || data; // tolerate either shape
+      const photos = data.photos || [];
       syncTagOptions(photos);
 
       if (!photos.length) {
@@ -129,7 +133,6 @@
 
       el.feedStatus.textContent = `Updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · refreshes every ${CFG.FEED_POLL_MS / 1000}s`;
 
-      // which server answered
       if (window.KONGSI_LAST_SERVED) {
         el.served.hidden = false;
         el.served.textContent = "served by " + window.KONGSI_LAST_SERVED;
@@ -151,12 +154,10 @@
   /* ---------- filter bar wiring (debounced search) ---------- */
   let debounce = null;
   el.q.addEventListener("input", () => { clearTimeout(debounce); debounce = setTimeout(loadFeed, 300); });
-  ["change"].forEach((evt) => {
-    el.uploader.addEventListener(evt, loadFeed);
-    el.tag.addEventListener(evt, loadFeed);
-    el.from.addEventListener(evt, loadFeed);
-    el.to.addEventListener(evt, loadFeed);
-  });
+  el.uploader.addEventListener("change", loadFeed);
+  el.tag.addEventListener("change", loadFeed);
+  el.from.addEventListener("change", loadFeed);
+  el.to.addEventListener("change", loadFeed);
   document.getElementById("filterbar").addEventListener("submit", (e) => { e.preventDefault(); loadFeed(); });
 
   /* ============================================================
@@ -178,7 +179,7 @@
             </div>
             <div class="field" style="margin-top:14px">
               <label for="caption">Caption</label>
-              <input id="caption" maxlength="140" placeholder="Say something about it">
+              <input id="caption" maxlength="500" placeholder="Say something about it">
             </div>
             <div class="field">
               <label for="tags">Tags <span style="font-weight:400">(comma separated)</span></label>
@@ -238,6 +239,7 @@
         await api.upload(`/groups/${encodeURIComponent(groupId)}/photos`, form);
         close();
         toast("Photo uploaded");
+        await loadGroup();   // refresh tags + members
         loadFeed();
       } catch (err) {
         errEl.textContent = err.message || "Upload failed.";
@@ -247,7 +249,6 @@
   }
   document.getElementById("uploadBtn").addEventListener("click", openUpload);
 
-  /* resize with a canvas; returns a JPEG Blob */
   function resizeImage(file, maxEdge, quality) {
     return new Promise((resolve, reject) => {
       const img = new Image();

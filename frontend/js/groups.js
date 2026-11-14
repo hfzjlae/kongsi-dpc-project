@@ -1,6 +1,10 @@
 /* ============================================================
    groups.js — list the groups you belong to, create one,
-   join one with a code.
+   join one with a code.  Matches the backend contract:
+     GET  /groups        -> { groups: [ { id, name, invite_code,
+                                          member_count, photo_count } ] }
+     POST /groups        -> { group: { id, name, invite_code } }
+     POST /groups/join   -> { group }           body: { inviteCode }
    ============================================================ */
 
 (function () {
@@ -9,38 +13,31 @@
   const me = Auth.user || {};
   const meAvatar = document.getElementById("meAvatar");
   if (meAvatar) {
-    meAvatar.textContent = initials(me.name);
-    meAvatar.style.background = colourFor(me.name);
+    meAvatar.textContent = initials(me.username);
+    meAvatar.style.background = colourFor(me.username);
   }
   wireSignOut("#signOut");
 
   const grid = document.getElementById("grid");
   const codeReveal = document.getElementById("codeReveal");
 
-  /* ---------- render the group grid ---------- */
-  function memberStack(members) {
-    return (members || []).slice(0, 4)
-      .map((m) => `<i style="background:${colourFor(m.name)}"></i>`).join("");
-  }
-
   function groupCard(g) {
-    const cover = g.coverUrl
-      ? `style="background-image:url('${esc(g.coverUrl)}')"`
-      : `style="background:linear-gradient(135deg, ${colourFor(g.name)}, #1f6fa3)"`;
+    const members = g.member_count || 0;
+    const photos = g.photo_count || 0;
     return `
       <a class="gcard" href="group.html?id=${encodeURIComponent(g.id)}">
-        <div class="gbanner" ${cover}></div>
+        <div class="gbanner" style="background:linear-gradient(135deg, ${colourFor(g.name)}, #1f6fa3)"></div>
         <div class="body">
           <b>${esc(g.name)}</b>
-          <small>${g.memberCount} member${g.memberCount === 1 ? "" : "s"} · ${g.photoCount} photo${g.photoCount === 1 ? "" : "s"}</small>
-          <div class="stack">${memberStack(g.members)}</div>
+          <small>${members} member${members === 1 ? "" : "s"} · ${photos} photo${photos === 1 ? "" : "s"}</small>
         </div>
       </a>`;
   }
 
   async function loadGroups() {
     try {
-      const groups = await api.get("/groups");
+      const data = await api.get("/groups");
+      const groups = data.groups || [];
       if (!groups.length) {
         grid.innerHTML = `<div class="empty">No groups yet. Create one, or join with an invite code.</div>`;
         return;
@@ -58,13 +55,13 @@
     const code = input.value.trim().toUpperCase();
     if (!code) return;
     try {
-      const g = await api.post("/groups/join", { code });
+      const data = await api.post("/groups/join", { inviteCode: code });
+      const g = data.group;
       toast(`Joined ${g.name}`);
       input.value = "";
       location.href = `group.html?id=${encodeURIComponent(g.id)}`;
     } catch (err) {
       if (err.status === 404) toast("That invite code is not valid.", true);
-      else if (err.status === 409) toast("You are already in that group.", true);
       else toast(err.message, true);
     }
   });
@@ -80,7 +77,7 @@
           <div class="body">
             <div class="field">
               <label for="cgName">Group name</label>
-              <input id="cgName" placeholder="e.g. Langkawi 2026" maxlength="60">
+              <input id="cgName" placeholder="e.g. Langkawi 2026" maxlength="80">
               <div class="field-error" id="cgErr"></div>
             </div>
           </div>
@@ -100,11 +97,11 @@
     document.getElementById("cgSave").onclick = async () => {
       const name = nameInput.value.trim();
       const errEl = document.getElementById("cgErr");
-      if (!name) { errEl.textContent = "Please enter a name."; return; }
+      if (name.length < 2) { errEl.textContent = "Group name must be at least 2 characters."; return; }
       try {
-        const g = await api.post("/groups", { name });
+        const data = await api.post("/groups", { name });
         close();
-        showCode(g);           // reveal the invite code to share
+        showCode(data.group);     // reveal the invite code to share
         await loadGroups();
       } catch (err) {
         errEl.textContent = err.message;
@@ -116,20 +113,20 @@
 
   /* ---------- invite-code reveal with copy ---------- */
   function showCode(g) {
+    const code = g.invite_code;
     codeReveal.innerHTML = `
       <div class="code-reveal">
         <div style="flex:1; min-width:0">
           <div style="font-size:12px; font-weight:600; color:var(--accent-ink)">Group created. Share this invite code:</div>
-          <div class="code" id="newCode">${esc(g.inviteCode)}</div>
+          <div class="code" id="newCode">${esc(code)}</div>
         </div>
         <button class="btn" id="copyCode">Copy</button>
       </div>`;
     document.getElementById("copyCode").onclick = async () => {
       try {
-        await navigator.clipboard.writeText(g.inviteCode);
+        await navigator.clipboard.writeText(code);
         toast("Invite code copied");
       } catch (e) {
-        // fallback: select the text so they can copy manually
         const r = document.createRange();
         r.selectNode(document.getElementById("newCode"));
         const sel = window.getSelection();

@@ -1,127 +1,170 @@
-// ------------------------------------------------------------------
-// api.js — shared helpers used by every page (PRESENTATION TIER).
-//
-// The frontend only ever talks to the API through the api() function
-// below. It never connects to the database or to S3 directly.
-// ------------------------------------------------------------------
-const API_BASE = window.APP_CONFIG.API_BASE_URL.replace(/\/$/, '');
-const TOKEN_KEY = 'kongsi_token';
-const USER_KEY = 'kongsi_user';
+/* ============================================================
+   api.js — shared helpers. Every page loads this.
+   - talks to the backend (the only file that does)
+   - stores / clears the JWT
+   - escapes HTML so user text can never inject markup (no XSS)
+   - small UI helpers: toast, avatar colour, time-ago, served-by badge
+   ============================================================ */
 
-// ---------- Session (who is signed in) ----------
-function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
-}
-function getUser() {
-  try {
-    return JSON.parse(localStorage.getItem(USER_KEY));
-  } catch {
-    return null;
+const CFG = window.KONGSI_CONFIG;
+
+/* ---------- auth token + current user ---------- */
+const Auth = {
+  TOKEN_KEY: "kongsi_token",
+  USER_KEY: "kongsi_user",
+
+  get token() {
+    try { return localStorage.getItem(this.TOKEN_KEY); } catch (e) { return null; }
+  },
+  get user() {
+    try { return JSON.parse(localStorage.getItem(this.USER_KEY) || "null"); }
+    catch (e) { return null; }
+  },
+  save(token, user) {
+    try {
+      localStorage.setItem(this.TOKEN_KEY, token);
+      localStorage.setItem(this.USER_KEY, JSON.stringify(user));
+    } catch (e) { /* private mode: still works for this tab via memory fallback */ }
+  },
+  clear() {
+    try {
+      localStorage.removeItem(this.TOKEN_KEY);
+      localStorage.removeItem(this.USER_KEY);
+    } catch (e) {}
+  },
+  /* redirect to login if not signed in. Call at the top of protected pages. */
+  require() {
+    if (!this.token) { location.replace("index.html"); return false; }
+    return true;
+  },
+};
+
+/* ---------- the fetch wrapper ---------- */
+/* Throws an ApiError on any non-2xx so callers can try/catch.
+   Captures the X-Served-By header onto window.KONGSI_LAST_SERVED. */
+class ApiError extends Error {
+  constructor(status, body) {
+    super((body && body.error) || `Request failed (${status})`);
+    this.status = status;
+    this.body = body || {};
   }
 }
-function saveSession(token, user) {
-  localStorage.setItem(TOKEN_KEY, token);
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
-}
-function clearSession() {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
-}
-// Call at the top of any page that needs a signed-in user
-function requireLogin() {
-  if (!getToken()) window.location.href = 'index.html';
-}
 
-// ---------- Calling the API ----------
-// api('/groups')                                  -> GET
-// api('/groups', { method: 'POST', json: {...} }) -> POST JSON
-// api('/groups/1/photos', { method: 'POST', formData }) -> file upload
-async function api(path, { method = 'GET', json, formData } = {}) {
+async function apiFetch(path, { method = "GET", body, isForm = false, auth = true } = {}) {
   const headers = {};
-  const token = getToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (auth && Auth.token) headers["Authorization"] = "Bearer " + Auth.token;
+  if (body && !isForm) headers["Content-Type"] = "application/json";
 
-  let body;
-  if (json !== undefined) {
-    headers['Content-Type'] = 'application/json';
-    body = JSON.stringify(json);
-  } else if (formData) {
-    body = formData; // the browser sets the multipart Content-Type itself
-  }
-
-  let response;
+  let res;
   try {
-    response = await fetch(`${API_BASE}${path}`, { method, headers, body });
-  } catch {
-    throw new Error('Cannot reach the server. Check your connection and try again.');
+    res = await fetch(CFG.API_URL + path, {
+      method,
+      headers,
+      body: isForm ? body : (body ? JSON.stringify(body) : undefined),
+    });
+  } catch (networkErr) {
+    // server unreachable / CORS / offline
+    throw new ApiError(0, { error: "Cannot reach the server. Is the API running?" });
   }
 
-  if (response.status === 204) return null;
-  const data = await response.json().catch(() => ({}));
+  // which API server answered (visible proof of the stateless multi-server setup)
+  const served = res.headers.get("X-Served-By");
+  if (served) window.KONGSI_LAST_SERVED = served;
 
-  if (response.status === 401 && token) {
-    // Token expired or invalid: sign out and go to the sign-in page
-    clearSession();
-    window.location.href = 'index.html';
+  // expired or invalid token -> back to login
+  if (res.status === 401) {
+    Auth.clear();
+    if (!location.pathname.endsWith("index.html") && location.pathname !== "/") {
+      location.replace("index.html");
+    }
+    throw new ApiError(401, { error: "Please sign in again." });
   }
-  if (!response.ok) {
-    const error = new Error(data.error || `Request failed (${response.status}).`);
-    error.status = response.status;
-    error.data = data;
-    throw error;
+
+  if (res.status === 204) return null;
+
+  let data = null;
+  const ct = res.headers.get("Content-Type") || "";
+  if (ct.includes("application/json")) {
+    data = await res.json().catch(() => null);
   }
+
+  if (!res.ok) throw new ApiError(res.status, data);
   return data;
 }
 
-// ---------- Safety: always escape user text before showing it ----------
-// Without this, a comment like <script>...</script> would run in other
-// users' browsers (a Cross-Site Scripting / XSS attack).
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+/* convenience verbs */
+const api = {
+  get: (p) => apiFetch(p),
+  post: (p, body) => apiFetch(p, { method: "POST", body }),
+  put: (p, body) => apiFetch(p, { method: "PUT", body }),
+  del: (p) => apiFetch(p, { method: "DELETE" }),
+  upload: (p, form) => apiFetch(p, { method: "POST", body: form, isForm: true }),
+  // no-auth call used by the login/register page
+  postPublic: (p, body) => apiFetch(p, { method: "POST", body, auth: false }),
+};
+
+/* ---------- security: escape everything from users before it hits innerHTML ---------- */
+function esc(str) {
+  return String(str == null ? "" : str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
-// ---------- Small formatting helpers ----------
-function formatDate(iso) {
-  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+/* ---------- tiny UI helpers ---------- */
+
+/* deterministic avatar colour from a name, so each person keeps one colour */
+function colourFor(name) {
+  const palette = ["#ef5a2a", "#1f9d6b", "#7ec8e3", "#9b5de5", "#c9a227", "#e07a3f", "#2e8b57", "#4b56b0"];
+  let h = 0;
+  for (const ch of String(name || "?")) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return palette[h % palette.length];
 }
+function initials(name) {
+  const parts = String(name || "?").trim().split(/\s+/);
+  return (parts[0][0] + (parts[1] ? parts[1][0] : "")).toUpperCase();
+}
+
+/* short "2h", "just now" style timestamps */
 function timeAgo(iso) {
-  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (seconds < 60) return 'just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
-  return formatDate(iso);
-}
-function getParam(name) {
-  return new URLSearchParams(window.location.search).get(name);
-}
-
-// Shows a message inside an element. kind: 'error' | 'success' | 'info'
-function showMessage(element, text, kind = 'error') {
-  element.textContent = text;
-  element.className = `message message-${kind}`;
-  element.hidden = !text;
+  const then = new Date(iso).getTime();
+  if (isNaN(then)) return "";
+  const s = Math.max(0, (Date.now() - then) / 1000);
+  if (s < 45) return "just now";
+  if (s < 90) return "1m";
+  const m = s / 60;
+  if (m < 60) return Math.round(m) + "m";
+  const h = m / 60;
+  if (h < 24) return Math.round(h) + "h";
+  const d = h / 24;
+  if (d < 7) return Math.round(d) + "d";
+  return new Date(iso).toLocaleDateString();
 }
 
-// ---------- Top bar shown on signed-in pages ----------
-function renderTopbar() {
-  const bar = document.getElementById('topbar');
-  if (!bar) return;
-  const user = getUser();
-  bar.innerHTML = `
-    <a class="wordmark" href="groups.html">kongsi</a>
-    <div class="topbar-user">
-      <span>Signed in as <strong>${escapeHtml(user?.username || '')}</strong></span>
-      <button type="button" class="button button-quiet" id="signOut">Sign out</button>
-    </div>`;
-  document.getElementById('signOut').addEventListener('click', () => {
-    clearSession();
-    window.location.href = 'index.html';
-  });
+/* toast notifications (replace alert(), which we never use) */
+function toast(msg, isError = false) {
+  let host = document.querySelector(".toast-host");
+  if (!host) {
+    host = document.createElement("div");
+    host.className = "toast-host";
+    document.body.appendChild(host);
+  }
+  const el = document.createElement("div");
+  el.className = "toast" + (isError ? " err" : "");
+  el.textContent = msg;
+  host.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+/* read ?key=value from the URL */
+function qs(key) {
+  return new URLSearchParams(location.search).get(key);
+}
+
+/* sign out link helper */
+function wireSignOut(sel) {
+  const el = document.querySelector(sel);
+  if (el) el.addEventListener("click", (e) => { e.preventDefault(); Auth.clear(); location.replace("index.html"); });
 }

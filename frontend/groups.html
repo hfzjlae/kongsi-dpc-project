@@ -1,55 +1,42 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Your groups — Kongsi</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Figtree:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect x=%224%22 y=%223%22 width=%2224%22 height=%2226%22 rx=%222%22 fill=%22%23fff%22 stroke=%22%2317212b%22 stroke-width=%222%22/%3E%3Crect x=%227%22 y=%226%22 width=%2218%22 height=%2215%22 fill=%22%231f6f54%22/%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="css/style.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kongsi — Your groups</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <header class="topbar" id="topbar"></header>
+  <nav class="nav">
+    <a class="logo" href="groups.html">Kongsi</a>
+    <span class="grow"></span>
+    <button class="pill" id="signOut" title="Sign out">Sign out</button>
+    <span class="avatar" id="meAvatar">?</span>
+  </nav>
 
   <main class="page">
-    <div class="split">
-      <aside>
-        <section class="panel">
-          <h2>Start a group</h2>
-          <p class="muted small">You'll get an invite code to share with friends.</p>
-          <p id="createMessage" class="message" hidden></p>
-          <form id="createForm">
-            <div class="field">
-              <label for="groupName">Group name</label>
-              <input type="text" id="groupName" placeholder="e.g. Final-year trip" required minlength="2" maxlength="80" />
-            </div>
-            <button class="button button-block" type="submit">Create group</button>
-          </form>
-        </section>
+    <div class="page-h">
+      <h2>Your groups</h2>
+      <div style="display:flex; gap:10px; flex-wrap:wrap">
+        <form class="join-row" id="joinForm">
+          <input id="joinCode" placeholder="Invite code" aria-label="Invite code" maxlength="16">
+          <button class="btn ghost" type="submit">Join</button>
+        </form>
+        <button class="btn" id="createBtn">+ Create group</button>
+      </div>
+    </div>
 
-        <section class="panel">
-          <h2>Join a group</h2>
-          <p class="muted small">Enter the code a friend sent you.</p>
-          <p id="joinMessage" class="message" hidden></p>
-          <form id="joinForm">
-            <div class="field">
-              <label for="inviteCode">Invite code</label>
-              <input type="text" id="inviteCode" placeholder="e.g. K7P2QM4X" required maxlength="12" autocomplete="off" />
-            </div>
-            <button class="button button-block" type="submit">Join group</button>
-          </form>
-        </section>
-      </aside>
-
-      <section>
-        <h1>Your groups</h1>
-        <p id="listMessage" class="message" hidden></p>
-        <ul class="group-list" id="groupList"></ul>
-      </section>
+    <div id="codeReveal"></div>
+    <div class="grid" id="grid">
+      <div class="empty" id="loading">Loading your groups…</div>
     </div>
   </main>
+
+  <!-- create-group modal -->
+  <div id="modalHost"></div>
 
   <script src="js/config.js"></script>
   <script src="js/api.js"></script>
